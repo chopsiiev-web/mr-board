@@ -1,0 +1,92 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meme Radar — sources</title>
+<style>
+ :root{--ink:#2D1B4E;--lime:#C3FF00;--limeink:#5f8a00;--coral:#e0455f;--lilac:#7d63b8;--mut:#6f6880;--line:#e7e3ef}
+ *{box-sizing:border-box}
+ body{margin:0;background:#fff;color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Helvetica,Arial,sans-serif}
+ .wrap{max-width:1140px;margin:0 auto;padding:14px}
+ .hd{display:flex;align-items:center;gap:10px}
+ .hd img{width:32px;height:32px;border-radius:7px;background:var(--ink);padding:5px}
+ h1{font-size:19px;margin:0} h1 span{color:var(--mut);font-weight:400}
+ .meta{color:var(--mut);font-size:12px;margin:3px 0 10px}
+ .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+ .filters select,.filters input{font:13px system-ui;padding:5px 8px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:#fff}
+ .filters input{flex:1;min-width:160px}
+ #fcount{color:var(--mut);font-size:12px;white-space:nowrap}
+ table{border-collapse:collapse;width:100%;font-size:12.5px}
+ th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+ th{position:sticky;top:0;background:#fff;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);white-space:nowrap;user-select:none}
+ th:hover{color:var(--ink)} th.active{color:var(--ink)}
+ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+ .src{font-weight:700;white-space:nowrap}
+ .txt{color:#4a4458;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .badge{padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap;color:#fff}
+ a{color:var(--limeink);text-decoration:none;font-weight:700}
+ .pace-pos{color:var(--limeink);font-weight:700}
+</style>
+<div class="wrap">
+ <div class="hd"><img src="logo.png" onerror="this.style.display='none'" alt=""><h1>Meme Radar <span>· sources</span></h1></div>
+ <div class="meta" id="meta">loading…</div>
+ <div class="filters">
+   <select id="fplat"><option value="">all platforms</option></select>
+   <select id="fstage"><option value="">all stages</option></select>
+   <select id="ftype"><option value="">all types</option></select>
+   <input id="fsearch" type="search" placeholder="search post or source…">
+   <span id="fcount"></span>
+ </div>
+ <table><thead><tr id="head"></tr></thead><tbody id="body"></tbody></table>
+</div>
+<script>
+const COLS=[
+ {k:"i",t:"#",num:true},
+ {k:"source",t:"source"},
+ {k:"platform",t:"plat",fmt:v=>`<span class="badge" style="background:${platColor(v)}">${v}</span>`},
+ {k:"text",t:"post"},
+ {k:"age_h",t:"age",num:true,fmt:v=>v<24?v+"h":Math.round(v/24)+"d"},
+ {k:"likes",t:"❤",num:true,fmt:nf},
+ {k:"views",t:"👁",num:true,fmt:nf},
+ {k:"comments",t:"💬",num:true,fmt:nf},
+ {k:"pace",t:"pace/hr",num:true,cls:"pace-pos",fmt:(v,r)=>v==null?"—":(v>=0?"+":"")+nf(v)+(r.reach_kind==="views"?"👁":"❤")},
+ {k:"heat",t:"heat",num:true,fmt:v=>v==null?"—":v+"×"},
+ {k:"spark",t:"trend",fmt:spark},
+ {k:"stage",t:"stage",fmt:(v,r)=>`<span class="badge" style="background:${stageColor(v)}">${r.stage_icon} ${v}</span>`},
+ {k:"url",t:"",fmt:v=>`<a href="${v}" target="_blank" rel="noopener">↗</a>`},
+];
+function nf(n){if(n==null)return"—";n=+n;return n>=1e6?(n/1e6).toFixed(1)+"M":n>=1e3?(n/1e3).toFixed(1)+"K":""+Math.round(n)}
+function platColor(p){return p==="Reddit"?"#ff4500":p==="IG"?"#c13584":p==="X"?"#222":"#9aa0a6"}
+function stageColor(s){return /BREAK/.test(s)?"#e0455f":/heating/.test(s)?"#e08a2b":/steady/.test(s)?"#7d63b8":/cooling/.test(s)?"#9aa0a6":/low data/.test(s)?"#b9b2c8":"#7d63b8"}
+function spark(pts){if(!pts||pts.length<2)return"";const w=58,h=16,lo=Math.min(...pts),hi=Math.max(...pts),r=(hi-lo)||1;
+ const d=pts.map((v,i)=>`${(i/(pts.length-1)*w).toFixed(1)},${(h-(v-lo)/r*h).toFixed(1)}`).join(" ");
+ return `<svg width="${w}" height="${h}" style="vertical-align:middle"><polyline points="${d}" fill="none" stroke="#5f8a00" stroke-width="1.5"/></svg>`}
+let DATA=[],sortK="pace",desc=true;
+const $=id=>document.getElementById(id);
+fetch("data.json?t="+Date.now()).then(r=>r.json()).then(d=>{
+ DATA=d.posts.map((p,i)=>({...p,i:i+1}));
+ $("meta").textContent=`${d.count} posts · updated ${d.generated} · pace & heat measure REACH (👁 views, or ❤ likes where none) · sorted by what's moving`;
+ fillFilters(); drawHead(); render();
+ ["fplat","fstage","ftype","fsearch"].forEach(id=>$(id).addEventListener("input",render));
+}).catch(e=>$("meta").textContent="failed to load data.json: "+e);
+function fillFilters(){
+ [...new Set(DATA.map(r=>r.platform))].sort().forEach(p=>$("fplat").add(new Option(p,p)));
+ [...new Set(DATA.map(r=>r.stage))].forEach(s=>$("fstage").add(new Option(s,s)));
+ [...new Set(DATA.map(r=>r.media_type))].filter(Boolean).sort().forEach(t=>$("ftype").add(new Option(t,t)));
+}
+function drawHead(){$("head").innerHTML=COLS.map(c=>{
+ const arrow=c.k===sortK?(desc?" ▼":" ▲"):"";
+ return `<th class="${c.num?'num ':''}${c.k===sortK?'active':''}" onclick="sortBy('${c.k}')">${c.t}${arrow}</th>`}).join("")}
+function sortBy(k){if(k==="i")return;desc=(sortK===k)?!desc:true;sortK=k;drawHead();render()}
+function render(){
+ const pf=$("fplat").value, sf=$("fstage").value, tf=$("ftype").value, q=$("fsearch").value.toLowerCase();
+ let rows=DATA.filter(r=>(!pf||r.platform===pf)&&(!sf||r.stage===sf)&&(!tf||r.media_type===tf)&&(!q||((r.text||"")+r.source).toLowerCase().includes(q)));
+ rows.sort((a,b)=>{let x=a[sortK],y=b[sortK];x=x==null?-1:x;y=y==null?-1:y;
+  if(typeof x==="string"||typeof y==="string")return desc?(""+y).localeCompare(""+x):(""+x).localeCompare(""+y);
+  return desc?y-x:x-y});
+ $("fcount").textContent=`${rows.length} shown`;
+ $("body").innerHTML=rows.map(r=>"<tr>"+COLS.map(c=>{
+  const v=r[c.k],disp=c.fmt?c.fmt(v,r):(v==null?"—":v);
+  const cls=(c.num?"num ":"")+(c.k==="source"?"src ":"")+(c.k==="text"?"txt ":"")+(c.cls&&v>0?c.cls:"");
+  return `<td class="${cls.trim()}"${c.k==="text"?` title="${(v||"").replace(/"/g,"&quot;")}"`:""}>${disp}</td>`;
+ }).join("")+"</tr>").join("")}
+</script>
